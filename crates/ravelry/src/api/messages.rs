@@ -191,7 +191,11 @@ impl<'a> MessagesApi<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn reply(&self, id: u64, data: &MessagePost) -> Result<MessageResponse, RavelryError> {
+    pub async fn reply(
+        &self,
+        id: u64,
+        data: &MessagePost,
+    ) -> Result<MessageResponse, RavelryError> {
         let path = format!("messages/{}/reply.json", id);
         let req = self.client.post_data(&path, data);
         self.client.send_json(req).await

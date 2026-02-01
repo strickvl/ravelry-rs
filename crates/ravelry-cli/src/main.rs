@@ -1954,7 +1954,10 @@ async fn run_bundles_command(cli: &Cli, cmd: &BundleCommands) -> Result<(), CliE
                 cli.print_json(&response)?;
             } else {
                 if let Some(paginator) = &response.paginator {
-                    println!("Bundles (page {}/{}):", paginator.page, paginator.page_count);
+                    println!(
+                        "Bundles (page {}/{}):",
+                        paginator.page, paginator.page_count
+                    );
                 } else {
                     println!("Bundles:");
                 }
@@ -2044,7 +2047,9 @@ async fn run_friends_command(cli: &Cli, cmd: &FriendCommands) -> Result<(), CliE
             page_size,
         } => {
             let username = resolve_username(&client, user).await?;
-            let params = FriendsActivityParams::new().page(*page).page_size(*page_size);
+            let params = FriendsActivityParams::new()
+                .page(*page)
+                .page_size(*page_size);
             let response = client.friends().activity(&username, &params).await?;
 
             if cli.json_output() {
@@ -2063,7 +2068,10 @@ async fn run_friends_command(cli: &Cli, cmd: &FriendCommands) -> Result<(), CliE
             }
         }
 
-        FriendCommands::Add { user, friend_user_id } => {
+        FriendCommands::Add {
+            user,
+            friend_user_id,
+        } => {
             let username = resolve_username(&client, user).await?;
             let response = client.friends().create(&username, *friend_user_id).await?;
 
@@ -2074,7 +2082,10 @@ async fn run_friends_command(cli: &Cli, cmd: &FriendCommands) -> Result<(), CliE
             }
         }
 
-        FriendCommands::Remove { user, friendship_id } => {
+        FriendCommands::Remove {
+            user,
+            friendship_id,
+        } => {
             let username = resolve_username(&client, user).await?;
             client.friends().destroy(&username, *friendship_id).await?;
             println!("Removed friendship: {}", friendship_id);

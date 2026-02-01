@@ -5,7 +5,7 @@
 mod common;
 
 use ravelry::types::UploadFile;
-use wiremock::matchers::{method, path, header_exists};
+use wiremock::matchers::{header_exists, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
@@ -15,12 +15,9 @@ async fn test_request_token_requires_auth() {
     Mock::given(method("POST"))
         .and(path("/upload/request_token.json"))
         .and(header_exists("authorization"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "upload_token": "test_token_123"
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "upload_token": "test_token_123"
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -39,14 +36,11 @@ async fn test_upload_image_no_auth_header() {
     // The upload/image endpoint is unauthenticated per Ravelry API docs
     Mock::given(method("POST"))
         .and(path("/upload/image.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "uploads": [
-                        {"file0": {"image_id": 12345}}
-                    ]
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "uploads": [
+                {"file0": {"image_id": 12345}}
+            ]
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -104,24 +98,17 @@ async fn test_image_status_no_auth() {
 
     Mock::given(method("GET"))
         .and(path("/upload/image/status.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "uploads": [
-                        {"file0": {"image_id": 99}}
-                    ]
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "uploads": [
+                {"file0": {"image_id": 99}}
+            ]
+        })))
         .expect(1)
         .mount(&server)
         .await;
 
     let client = common::test_client(&server);
-    let response = client
-        .upload()
-        .image_status("test_token")
-        .await
-        .unwrap();
+    let response = client.upload().image_status("test_token").await.unwrap();
 
     assert_eq!(response.uploads.len(), 1);
 }

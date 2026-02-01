@@ -13,26 +13,23 @@ async fn test_list_favorites() {
 
     Mock::given(method("GET"))
         .and(path("/people/testuser/favorites/list.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "favorites": [
-                        {
-                            "id": 1,
-                            "type": "pattern",
-                            "favorited_id": 12345,
-                            "comment": "Love this!"
-                        }
-                    ],
-                    "paginator": {
-                        "page": 1,
-                        "page_count": 1,
-                        "page_size": 10,
-                        "results": 1,
-                        "last_page": 1
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "favorites": [
+                {
+                    "id": 1,
+                    "type": "pattern",
+                    "favorited_id": 12345,
+                    "comment": "Love this!"
+                }
+            ],
+            "paginator": {
+                "page": 1,
+                "page_count": 1,
+                "page_size": 10,
+                "results": 1,
+                "last_page": 1
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -52,16 +49,13 @@ async fn test_create_favorite() {
 
     Mock::given(method("POST"))
         .and(path("/people/testuser/favorites/create.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "favorite": {
-                        "id": 999,
-                        "type": "pattern",
-                        "favorited_id": 12345
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "favorite": {
+                "id": 999,
+                "type": "pattern",
+                "favorited_id": 12345
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -82,15 +76,12 @@ async fn test_add_favorite_to_bundle() {
 
     Mock::given(method("POST"))
         .and(path("/people/testuser/favorites/100/add_to_bundle.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "favorite": {
-                        "id": 100,
-                        "type": "pattern"
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "favorite": {
+                "id": 100,
+                "type": "pattern"
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;

@@ -13,30 +13,27 @@ async fn test_list_messages() {
 
     Mock::given(method("GET"))
         .and(path("/messages/list.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "messages": [
-                        {
-                            "id": 1,
-                            "subject": "Hello",
-                            "read_message": false
-                        },
-                        {
-                            "id": 2,
-                            "subject": "World",
-                            "read_message": true
-                        }
-                    ],
-                    "paginator": {
-                        "page": 1,
-                        "page_count": 1,
-                        "page_size": 20,
-                        "results": 2,
-                        "last_page": 1
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "messages": [
+                {
+                    "id": 1,
+                    "subject": "Hello",
+                    "read_message": false
+                },
+                {
+                    "id": 2,
+                    "subject": "World",
+                    "read_message": true
+                }
+            ],
+            "paginator": {
+                "page": 1,
+                "page_count": 1,
+                "page_size": 20,
+                "results": 2,
+                "last_page": 1
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -63,15 +60,12 @@ async fn test_create_message() {
                 "content": "Test body"
             }
         })))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "message": {
-                        "id": 123,
-                        "subject": "Test Subject"
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": {
+                "id": 123,
+                "subject": "Test Subject"
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -92,15 +86,12 @@ async fn test_reply_to_message() {
 
     Mock::given(method("POST"))
         .and(path("/messages/456/reply.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "message": {
-                        "id": 789,
-                        "subject": "Re: Original"
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": {
+                "id": 789,
+                "subject": "Re: Original"
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;
@@ -118,15 +109,12 @@ async fn test_unarchive_message() {
 
     Mock::given(method("POST"))
         .and(path("/messages/123/unarchive.json"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({
-                    "message": {
-                        "id": 123,
-                        "subject": "Unarchived message"
-                    }
-                })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "message": {
+                "id": 123,
+                "subject": "Unarchived message"
+            }
+        })))
         .expect(1)
         .mount(&server)
         .await;

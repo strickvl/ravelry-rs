@@ -9,7 +9,9 @@ use reqwest::multipart::{Form, Part};
 
 use crate::client::RavelryClient;
 use crate::error::RavelryError;
-use crate::types::{UploadFile, UploadImageResponse, UploadRequestTokenResponse, UploadStatusResponse};
+use crate::types::{
+    UploadFile, UploadImageResponse, UploadRequestTokenResponse, UploadStatusResponse,
+};
 
 /// Maximum number of files per upload request.
 pub const MAX_UPLOAD_FILES: usize = 10;
@@ -117,7 +119,10 @@ impl<'a> UploadApi<'a> {
         }
 
         // Use unauthenticated POST for upload
-        let req = self.client.post_no_auth("upload/image.json").multipart(form);
+        let req = self
+            .client
+            .post_no_auth("upload/image.json")
+            .multipart(form);
         self.client.send_json(req).await
     }
 

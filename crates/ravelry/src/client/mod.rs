@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 use url::Url;
 
 use crate::api::{
-    bundles::BundlesApi, bundled_items::BundledItemsApi, favorites::FavoritesApi,
+    bundled_items::BundledItemsApi, bundles::BundlesApi, favorites::FavoritesApi,
     friends::FriendsApi, messages::MessagesApi, patterns::PatternsApi, projects::ProjectsApi,
     root::RootApi, stash::StashApi, upload::UploadApi, yarns::YarnsApi,
 };

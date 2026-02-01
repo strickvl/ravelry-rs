@@ -43,10 +43,7 @@ async fn test_not_modified_error() {
 
     Mock::given(method("GET"))
         .and(path("/current_user.json"))
-        .respond_with(
-            ResponseTemplate::new(304)
-                .insert_header("etag", "\"abc123\""),
-        )
+        .respond_with(ResponseTemplate::new(304).insert_header("etag", "\"abc123\""))
         .expect(1)
         .mount(&server)
         .await;
@@ -71,12 +68,9 @@ async fn test_api_error_response() {
 
     Mock::given(method("GET"))
         .and(path("/patterns/99999.json"))
-        .respond_with(
-            ResponseTemplate::new(404)
-                .set_body_json(serde_json::json!({
-                    "error": "Pattern not found"
-                })),
-        )
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "error": "Pattern not found"
+        })))
         .expect(1)
         .mount(&server)
         .await;
