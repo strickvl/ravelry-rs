@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::RavelryClient;
 use crate::error::RavelryError;
-use crate::pagination::PageParams;
+use crate::pagination::{PageParams, Paginator};
 use crate::types::{StashFull, StashPost, StashSmall};
 
 /// Service for stash-related API endpoints.
@@ -185,6 +185,10 @@ impl StashListParams {
 pub struct StashListResponse {
     /// The list of stash entries.
     pub stash: Vec<StashSmall>,
+
+    /// Pagination information (may not be present in all responses).
+    #[serde(default)]
+    pub paginator: Option<Paginator>,
 }
 
 /// Response from showing a single stash entry.

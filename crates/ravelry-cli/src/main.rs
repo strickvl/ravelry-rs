@@ -7,13 +7,14 @@ use config::{Config, ConfigError, Profile};
 use ravelry::{
     api::{
         messages::{MessageFolder, MessagesListParams},
-        patterns::PatternSearchParams,
+        patterns::{PatternProjectsParams, PatternSearchParams},
         projects::ProjectsListParams,
         stash::StashListParams,
         yarns::YarnSearchParams,
     },
     auth::{BasicAuth, OAuth2Auth},
     pagination::collect_all_pages,
+    types::{ProjectPost, StashPost},
     RavelryClient, RavelryError, RavelryOAuth2Client,
 };
 use std::time::Duration;
@@ -35,12 +36,16 @@ struct Cli {
     profile: Option<String>,
 
     /// Output as JSON
-    #[arg(long, global = true)]
+    #[arg(long, global = true, conflicts_with = "json_pretty")]
     json: bool,
 
     /// Output as pretty-printed JSON
-    #[arg(long, global = true)]
+    #[arg(long, global = true, conflicts_with = "json")]
     json_pretty: bool,
+
+    /// Enable debug mode (adds debug info to API responses)
+    #[arg(long, global = true)]
+    debug: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -97,6 +102,13 @@ enum AuthCommands {
         scopes: String,
     },
 
+    /// Refresh OAuth2 tokens for a profile
+    Refresh {
+        /// Profile name to refresh (uses current profile if not specified)
+        #[arg(long)]
+        profile_name: Option<String>,
+    },
+
     /// Set up basic auth credentials
     Basic {
         /// Access key
@@ -120,6 +132,15 @@ enum AuthCommands {
         /// Profile name to switch to
         name: String,
     },
+
+    /// Delete a profile
+    Delete {
+        /// Profile name to delete
+        name: String,
+    },
+
+    /// Show the current authenticated user (alias for top-level whoami)
+    Whoami,
 }
 
 #[derive(Subcommand)]
@@ -133,6 +154,30 @@ enum PatternCommands {
         /// Filter by craft (knitting, crochet)
         #[arg(long)]
         craft: Option<String>,
+
+        /// Page number
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Results per page
+        #[arg(long, default_value = "10")]
+        page_size: u32,
+
+        /// Fetch all pages
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Show pattern details
+    Show {
+        /// Pattern ID
+        id: u64,
+    },
+
+    /// List projects made from a pattern
+    Projects {
+        /// Pattern ID
+        id: u64,
 
         /// Page number
         #[arg(long, default_value = "1")]
@@ -180,9 +225,9 @@ enum YarnCommands {
 enum ProjectCommands {
     /// List projects for a user
     List {
-        /// Username
+        /// Username (uses current user if not specified)
         #[arg(long)]
-        user: String,
+        user: Option<String>,
 
         /// Page number
         #[arg(long, default_value = "1")]
@@ -199,12 +244,61 @@ enum ProjectCommands {
 
     /// Show project details
     Show {
-        /// Username
+        /// Username (uses current user if not specified)
         #[arg(long)]
-        user: String,
+        user: Option<String>,
 
         /// Project ID or permalink
         id: String,
+    },
+
+    /// Create a new project
+    Create {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Project name
+        #[arg(long)]
+        name: String,
+
+        /// Pattern ID to link to
+        #[arg(long)]
+        pattern_id: Option<u64>,
+
+        /// Status ID (1=in progress, 2=finished, etc.)
+        #[arg(long)]
+        status_id: Option<u64>,
+
+        /// Craft ID (1=knitting, 2=crochet, etc.)
+        #[arg(long)]
+        craft_id: Option<u64>,
+    },
+
+    /// Update an existing project
+    Update {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Project ID
+        id: u64,
+
+        /// New project name
+        #[arg(long)]
+        name: Option<String>,
+
+        /// New status ID
+        #[arg(long)]
+        status_id: Option<u64>,
+
+        /// New progress percentage (0-100)
+        #[arg(long)]
+        progress: Option<u32>,
+
+        /// New notes
+        #[arg(long)]
+        notes: Option<String>,
     },
 }
 
@@ -212,9 +306,9 @@ enum ProjectCommands {
 enum StashCommands {
     /// List stash for a user
     List {
-        /// Username
+        /// Username (uses current user if not specified)
         #[arg(long)]
-        user: String,
+        user: Option<String>,
 
         /// Page number
         #[arg(long, default_value = "1")]
@@ -231,12 +325,57 @@ enum StashCommands {
 
     /// Show stash entry details
     Show {
-        /// Username
+        /// Username (uses current user if not specified)
         #[arg(long)]
-        user: String,
+        user: Option<String>,
 
         /// Stash ID or permalink
         id: String,
+    },
+
+    /// Create a new stash entry
+    Create {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Yarn ID to add to stash
+        #[arg(long)]
+        yarn_id: u64,
+
+        /// Colorway name
+        #[arg(long)]
+        colorway: Option<String>,
+
+        /// Number of skeins
+        #[arg(long)]
+        skeins: Option<f64>,
+
+        /// Notes
+        #[arg(long)]
+        notes: Option<String>,
+    },
+
+    /// Update an existing stash entry
+    Update {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Stash ID
+        id: u64,
+
+        /// Colorway name
+        #[arg(long)]
+        colorway: Option<String>,
+
+        /// Number of skeins
+        #[arg(long)]
+        skeins: Option<f64>,
+
+        /// Notes
+        #[arg(long)]
+        notes: Option<String>,
     },
 }
 
@@ -273,8 +412,20 @@ enum MessageCommands {
         id: u64,
     },
 
+    /// Mark a message as unread
+    MarkUnread {
+        /// Message ID
+        id: u64,
+    },
+
     /// Archive a message
     Archive {
+        /// Message ID
+        id: u64,
+    },
+
+    /// Delete a message
+    Delete {
         /// Message ID
         id: u64,
     },
@@ -286,7 +437,7 @@ impl Cli {
         // First, try CLI args (backward compatible)
         if let (Some(access_key), Some(personal_key)) = (&self.access_key, &self.personal_key) {
             let auth = BasicAuth::new(access_key, personal_key);
-            return Ok(RavelryClient::builder(auth).build()?);
+            return Ok(RavelryClient::builder(auth).debug(self.debug).build()?);
         }
 
         // Otherwise, try config profiles
@@ -310,7 +461,7 @@ impl Cli {
                 personal_key,
             } => {
                 let auth = BasicAuth::new(access_key, personal_key);
-                Ok(RavelryClient::builder(auth).build()?)
+                Ok(RavelryClient::builder(auth).debug(self.debug).build()?)
             }
             Profile::OAuth2 {
                 client_id,
@@ -346,7 +497,7 @@ impl Cli {
                 }
 
                 let auth = OAuth2Auth::new(&token.access_token);
-                Ok(RavelryClient::builder(auth).build()?)
+                Ok(RavelryClient::builder(auth).debug(self.debug).build()?)
             }
         }
     }
@@ -447,92 +598,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 
         Commands::Auth(auth_cmd) => run_auth_command(&cli, auth_cmd).await?,
 
-        Commands::Patterns(PatternCommands::Search {
-            query,
-            craft,
-            page,
-            page_size,
-            all,
-        }) => {
-            let client = cli.build_client().await?;
-
-            if *all {
-                let all_patterns = collect_all_pages(*page_size, None, |page_params| {
-                    let client = &client;
-                    let query = query.clone();
-                    let craft = craft.clone();
-                    async move {
-                        let mut params = PatternSearchParams {
-                            page: page_params,
-                            ..Default::default()
-                        };
-                        if let Some(q) = query {
-                            params = params.query(q);
-                        }
-                        if let Some(c) = craft {
-                            params = params.craft(c);
-                        }
-                        let resp = client.patterns().search(&params).await?;
-                        Ok((resp.patterns, resp.paginator))
-                    }
-                })
-                .await?;
-
-                if cli.json_output() {
-                    cli.print_json(&all_patterns)?;
-                } else {
-                    println!("Found {} patterns total", all_patterns.len());
-                    for pattern in &all_patterns {
-                        let designer = pattern.designer_name.as_deref().unwrap_or("Unknown");
-                        let free = if pattern.free.unwrap_or(false) {
-                            " [FREE]"
-                        } else {
-                            ""
-                        };
-                        println!(
-                            "  {} - {} by {}{}",
-                            pattern.id, pattern.name, designer, free
-                        );
-                    }
-                }
-            } else {
-                let mut params = PatternSearchParams::new().page(*page).page_size(*page_size);
-
-                if let Some(q) = query {
-                    params = params.query(q);
-                }
-                if let Some(c) = craft {
-                    params = params.craft(c);
-                }
-
-                let response = client.patterns().search(&params).await?;
-
-                if cli.json_output() {
-                    cli.print_json(&response)?;
-                } else {
-                    println!(
-                        "Found {} patterns (page {}/{})",
-                        response.paginator.results,
-                        response.paginator.page,
-                        response.paginator.page_count
-                    );
-                    println!();
-
-                    for pattern in &response.patterns {
-                        let designer = pattern.designer_name.as_deref().unwrap_or("Unknown");
-                        let free = if pattern.free.unwrap_or(false) {
-                            " [FREE]"
-                        } else {
-                            ""
-                        };
-                        println!(
-                            "  {} - {} by {}{}",
-                            pattern.id, pattern.name, designer, free
-                        );
-                    }
-                }
-            }
-        }
+        Commands::Patterns(pattern_cmd) => run_pattern_command(&cli, pattern_cmd).await?,
 
         Commands::Yarns(yarn_cmd) => run_yarn_command(&cli, yarn_cmd).await?,
         Commands::Projects(project_cmd) => run_project_command(&cli, project_cmd).await?,
@@ -543,7 +609,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
     Ok(())
 }
 
-async fn run_auth_command(_cli: &Cli, cmd: &AuthCommands) -> Result<(), CliError> {
+async fn run_auth_command(cli: &Cli, cmd: &AuthCommands) -> Result<(), CliError> {
     match cmd {
         AuthCommands::Login {
             client_id,
@@ -648,6 +714,260 @@ async fn run_auth_command(_cli: &Cli, cmd: &AuthCommands) -> Result<(), CliError
             config.save()?;
             println!("Switched to profile '{}'.", name);
         }
+
+        AuthCommands::Refresh { profile_name } => {
+            let mut config = Config::load()?;
+
+            // Determine which profile to refresh
+            let name = profile_name
+                .as_deref()
+                .or(cli.profile.as_deref())
+                .or(config.current_profile.as_deref())
+                .ok_or(CliError::MissingCredentials(
+                    "No profile specified. Use --profile-name or set a current profile.",
+                ))?
+                .to_string();
+
+            let profile = config
+                .get_profile(&name)
+                .ok_or_else(|| CliError::Other(format!("Profile '{}' not found.", name)))?;
+
+            match profile {
+                Profile::OAuth2 {
+                    client_id,
+                    client_secret,
+                    token,
+                } => {
+                    let refresh_token =
+                        token
+                            .refresh_token
+                            .as_ref()
+                            .ok_or(CliError::MissingCredentials(
+                            "OAuth2 profile has no refresh token. Re-login with 'offline' scope.",
+                        ))?;
+
+                    let oauth_client = RavelryOAuth2Client::new(
+                        client_id,
+                        client_secret,
+                        "https://localhost:8080/callback",
+                    )?;
+
+                    println!("Refreshing token for profile '{}'...", name);
+                    let new_token = oauth_client.refresh(refresh_token).await?;
+
+                    // Save updated token
+                    config.set_profile(&name, Profile::oauth2(client_id, client_secret, new_token));
+                    config.save()?;
+
+                    println!("Token refreshed successfully.");
+                }
+                Profile::Basic { .. } => {
+                    return Err(CliError::Other(
+                        "Cannot refresh Basic auth profile. Refresh is only for OAuth2."
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        AuthCommands::Delete { name } => {
+            let mut config = Config::load()?;
+
+            if config.get_profile(name).is_none() {
+                eprintln!("Profile '{}' not found.", name);
+                std::process::exit(1);
+            }
+
+            config.delete_profile(name);
+            config.save()?;
+            println!("Deleted profile '{}'.", name);
+        }
+
+        AuthCommands::Whoami => {
+            let client = cli.build_client().await?;
+            let response = client.root().current_user().await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let user = &response.user;
+                println!("Logged in as: {}", user.username);
+                if let Some(name) = &user.name {
+                    println!("Name: {name}");
+                }
+                println!("ID: {}", user.id);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_pattern_command(cli: &Cli, cmd: &PatternCommands) -> Result<(), CliError> {
+    let client = cli.build_client().await?;
+
+    match cmd {
+        PatternCommands::Search {
+            query,
+            craft,
+            page,
+            page_size,
+            all,
+        } => {
+            if *all {
+                let all_patterns = collect_all_pages(*page_size, None, |page_params| {
+                    let client = &client;
+                    let query = query.clone();
+                    let craft = craft.clone();
+                    async move {
+                        let mut params = PatternSearchParams {
+                            page: page_params,
+                            ..Default::default()
+                        };
+                        if let Some(q) = query {
+                            params = params.query(q);
+                        }
+                        if let Some(c) = craft {
+                            params = params.craft(c);
+                        }
+                        let resp = client.patterns().search(&params).await?;
+                        Ok((resp.patterns, resp.paginator))
+                    }
+                })
+                .await?;
+
+                if cli.json_output() {
+                    cli.print_json(&all_patterns)?;
+                } else {
+                    println!("Found {} patterns total", all_patterns.len());
+                    for pattern in &all_patterns {
+                        let designer = pattern.designer_name.as_deref().unwrap_or("Unknown");
+                        let free = if pattern.free.unwrap_or(false) {
+                            " [FREE]"
+                        } else {
+                            ""
+                        };
+                        println!(
+                            "  {} - {} by {}{}",
+                            pattern.id, pattern.name, designer, free
+                        );
+                    }
+                }
+            } else {
+                let mut params = PatternSearchParams::new().page(*page).page_size(*page_size);
+
+                if let Some(q) = query {
+                    params = params.query(q);
+                }
+                if let Some(c) = craft {
+                    params = params.craft(c);
+                }
+
+                let response = client.patterns().search(&params).await?;
+
+                if cli.json_output() {
+                    cli.print_json(&response)?;
+                } else {
+                    println!(
+                        "Found {} patterns (page {}/{})",
+                        response.paginator.results,
+                        response.paginator.page,
+                        response.paginator.page_count
+                    );
+                    println!();
+
+                    for pattern in &response.patterns {
+                        let designer = pattern.designer_name.as_deref().unwrap_or("Unknown");
+                        let free = if pattern.free.unwrap_or(false) {
+                            " [FREE]"
+                        } else {
+                            ""
+                        };
+                        println!(
+                            "  {} - {} by {}{}",
+                            pattern.id, pattern.name, designer, free
+                        );
+                    }
+                }
+            }
+        }
+
+        PatternCommands::Show { id } => {
+            let response = client.patterns().show(*id).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let pattern = &response.pattern;
+                println!("Pattern: {}", pattern.name);
+                println!("ID: {}", pattern.id);
+                if let Some(designer) = &pattern.designer_name {
+                    println!("Designer: {designer}");
+                }
+                if let Some(free) = pattern.free {
+                    println!("Free: {}", if free { "Yes" } else { "No" });
+                }
+                if let Some(count) = pattern.projects_count {
+                    println!("Projects: {count}");
+                }
+                if let Some(rating) = pattern.rating_average {
+                    println!("Rating: {:.1}/5", rating);
+                }
+            }
+        }
+
+        PatternCommands::Projects {
+            id,
+            page,
+            page_size,
+            all,
+        } => {
+            if *all {
+                let all_projects = collect_all_pages(*page_size, None, |page_params| {
+                    let client = &client;
+                    let id = *id;
+                    async move {
+                        let params = PatternProjectsParams {
+                            page: page_params,
+                            ..Default::default()
+                        };
+                        let resp = client.patterns().projects(id, &params).await?;
+                        Ok((resp.projects, resp.paginator))
+                    }
+                })
+                .await?;
+
+                if cli.json_output() {
+                    cli.print_json(&all_projects)?;
+                } else {
+                    println!("Found {} projects total", all_projects.len());
+                    for project in &all_projects {
+                        let status = project.status_name.as_deref().unwrap_or("Unknown");
+                        println!("  {} - {} [{}]", project.id, project.name, status);
+                    }
+                }
+            } else {
+                let params = PatternProjectsParams::new()
+                    .page(*page)
+                    .page_size(*page_size);
+                let response = client.patterns().projects(*id, &params).await?;
+
+                if cli.json_output() {
+                    cli.print_json(&response)?;
+                } else {
+                    println!(
+                        "Projects for pattern {} (page {}/{})",
+                        id, response.paginator.page, response.paginator.page_count
+                    );
+                    println!();
+
+                    for project in &response.projects {
+                        let status = project.status_name.as_deref().unwrap_or("Unknown");
+                        println!("  {} - {} [{}]", project.id, project.name, status);
+                    }
+                }
+            }
+        }
     }
 
     Ok(())
@@ -743,6 +1063,20 @@ async fn run_yarn_command(cli: &Cli, cmd: &YarnCommands) -> Result<(), CliError>
     Ok(())
 }
 
+/// Helper to resolve username from option or current user API call.
+async fn resolve_username(
+    client: &RavelryClient,
+    user: &Option<String>,
+) -> Result<String, CliError> {
+    match user {
+        Some(u) => Ok(u.clone()),
+        None => {
+            let response = client.root().current_user().await?;
+            Ok(response.user.username)
+        }
+    }
+}
+
 async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), CliError> {
     let client = cli.build_client().await?;
 
@@ -753,16 +1087,18 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
             page_size,
             all,
         } => {
+            let username = resolve_username(&client, user).await?;
+
             if *all {
                 let all_projects = collect_all_pages(*page_size, None, |page_params| {
                     let client = &client;
-                    let user = user.clone();
+                    let username = username.clone();
                     async move {
                         let params = ProjectsListParams {
                             page: page_params,
                             ..Default::default()
                         };
-                        let resp = client.projects().list(&user, &params).await?;
+                        let resp = client.projects().list(&username, &params).await?;
                         Ok((resp.projects, resp.paginator))
                     }
                 })
@@ -779,7 +1115,7 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                 }
             } else {
                 let params = ProjectsListParams::new().page(*page).page_size(*page_size);
-                let response = client.projects().list(user, &params).await?;
+                let response = client.projects().list(&username, &params).await?;
 
                 if cli.json_output() {
                     cli.print_json(&response)?;
@@ -801,9 +1137,10 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
         }
 
         ProjectCommands::Show { user, id } => {
+            let username = resolve_username(&client, user).await?;
             let response = client
                 .projects()
-                .show(user, id, &Default::default())
+                .show(&username, id, &Default::default())
                 .await?;
 
             if cli.json_output() {
@@ -823,6 +1160,79 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                 }
             }
         }
+
+        ProjectCommands::Create {
+            user,
+            name,
+            pattern_id,
+            status_id,
+            craft_id,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut post = ProjectPost::new().name(name);
+            if let Some(pid) = pattern_id {
+                post = post.pattern_id(*pid);
+            }
+            if let Some(sid) = status_id {
+                post = post.status_id(*sid);
+            }
+            if let Some(cid) = craft_id {
+                post.craft_id = Some(*cid);
+            }
+
+            let response = client.projects().create(&username, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let project = &response.project;
+                println!("Created project: {} (ID: {})", project.name, project.id);
+                if let Some(status) = &project.status_name {
+                    println!("Status: {status}");
+                }
+            }
+        }
+
+        ProjectCommands::Update {
+            user,
+            id,
+            name,
+            status_id,
+            progress,
+            notes,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut post = ProjectPost::new();
+            if let Some(n) = name {
+                post = post.name(n);
+            }
+            if let Some(sid) = status_id {
+                post = post.status_id(*sid);
+            }
+            if let Some(p) = progress {
+                post = post.progress(*p);
+            }
+            if let Some(n) = notes {
+                post.notes = Some(n.clone());
+            }
+
+            let response = client.projects().update(&username, *id, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let project = &response.project;
+                println!("Updated project: {} (ID: {})", project.name, project.id);
+                if let Some(status) = &project.status_name {
+                    println!("Status: {status}");
+                }
+                if let Some(prog) = project.progress {
+                    println!("Progress: {}%", prog);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -836,30 +1246,93 @@ async fn run_stash_command(cli: &Cli, cmd: &StashCommands) -> Result<(), CliErro
             user,
             page,
             page_size,
-            all: _,
+            all,
         } => {
-            // Note: Stash list endpoint may not return a paginator
-            let params = StashListParams::new().page(*page).page_size(*page_size);
-            let response = client.stash().list(user, &params).await?;
+            let username = resolve_username(&client, user).await?;
 
-            if cli.json_output() {
-                cli.print_json(&response)?;
-            } else {
-                println!("Stash entries:");
-                for entry in &response.stash {
-                    let yarn = entry.yarn_name.as_deref().unwrap_or("Unknown yarn");
-                    let color = entry.colorway_name.as_deref().unwrap_or("");
-                    if color.is_empty() {
-                        println!("  {} - {}", entry.id, yarn);
+            if *all {
+                // Try to use pagination if available
+                let first_response = client
+                    .stash()
+                    .list(
+                        &username,
+                        &StashListParams::new().page(1).page_size(*page_size),
+                    )
+                    .await?;
+
+                if let Some(paginator) = &first_response.paginator {
+                    // Pagination available, fetch all pages
+                    let mut all_stash = first_response.stash;
+                    let total_pages = paginator.page_count;
+
+                    for page_num in 2..=total_pages {
+                        let params = StashListParams::new().page(page_num).page_size(*page_size);
+                        let resp = client.stash().list(&username, &params).await?;
+                        all_stash.extend(resp.stash);
+                    }
+
+                    if cli.json_output() {
+                        cli.print_json(&all_stash)?;
                     } else {
-                        println!("  {} - {} ({})", entry.id, yarn, color);
+                        println!("Found {} stash entries total", all_stash.len());
+                        for entry in &all_stash {
+                            let yarn = entry.yarn_name.as_deref().unwrap_or("Unknown yarn");
+                            let color = entry.colorway_name.as_deref().unwrap_or("");
+                            if color.is_empty() {
+                                println!("  {} - {}", entry.id, yarn);
+                            } else {
+                                println!("  {} - {} ({})", entry.id, yarn, color);
+                            }
+                        }
+                    }
+                } else {
+                    // No paginator, just return what we have
+                    if cli.json_output() {
+                        cli.print_json(&first_response.stash)?;
+                    } else {
+                        println!("Stash entries (pagination not available, showing first page):");
+                        for entry in &first_response.stash {
+                            let yarn = entry.yarn_name.as_deref().unwrap_or("Unknown yarn");
+                            let color = entry.colorway_name.as_deref().unwrap_or("");
+                            if color.is_empty() {
+                                println!("  {} - {}", entry.id, yarn);
+                            } else {
+                                println!("  {} - {} ({})", entry.id, yarn, color);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let params = StashListParams::new().page(*page).page_size(*page_size);
+                let response = client.stash().list(&username, &params).await?;
+
+                if cli.json_output() {
+                    cli.print_json(&response)?;
+                } else {
+                    if let Some(paginator) = &response.paginator {
+                        println!(
+                            "Stash entries (page {}/{}):",
+                            paginator.page, paginator.page_count
+                        );
+                    } else {
+                        println!("Stash entries:");
+                    }
+                    for entry in &response.stash {
+                        let yarn = entry.yarn_name.as_deref().unwrap_or("Unknown yarn");
+                        let color = entry.colorway_name.as_deref().unwrap_or("");
+                        if color.is_empty() {
+                            println!("  {} - {}", entry.id, yarn);
+                        } else {
+                            println!("  {} - {} ({})", entry.id, yarn, color);
+                        }
                     }
                 }
             }
         }
 
         StashCommands::Show { user, id } => {
-            let response = client.stash().show(user, id).await?;
+            let username = resolve_username(&client, user).await?;
+            let response = client.stash().show(&username, id).await?;
 
             if cli.json_output() {
                 cli.print_json(&response)?;
@@ -877,6 +1350,81 @@ async fn run_stash_command(cli: &Cli, cmd: &StashCommands) -> Result<(), CliErro
                 }
                 if let Some(skeins) = stash.skeins {
                     println!("Skeins: {skeins}");
+                }
+            }
+        }
+
+        StashCommands::Create {
+            user,
+            yarn_id,
+            colorway,
+            skeins,
+            notes,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut post = StashPost::new().yarn_id(*yarn_id);
+            if let Some(c) = colorway {
+                post = post.colorway_name(c);
+            }
+            if let Some(s) = skeins {
+                post = post.skeins(*s);
+            }
+            if let Some(n) = notes {
+                post.notes = Some(n.clone());
+            }
+
+            let response = client.stash().create(&username, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let stash = &response.stash;
+                println!("Created stash entry: {}", stash.id);
+                if let Some(yarn) = &stash.yarn_name {
+                    println!("Yarn: {yarn}");
+                }
+                if let Some(color) = &stash.colorway_name {
+                    println!("Colorway: {color}");
+                }
+            }
+        }
+
+        StashCommands::Update {
+            user,
+            id,
+            colorway,
+            skeins,
+            notes,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut post = StashPost::new();
+            if let Some(c) = colorway {
+                post = post.colorway_name(c);
+            }
+            if let Some(s) = skeins {
+                post = post.skeins(*s);
+            }
+            if let Some(n) = notes {
+                post.notes = Some(n.clone());
+            }
+
+            let response = client.stash().update(&username, *id, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let stash = &response.stash;
+                println!("Updated stash entry: {}", stash.id);
+                if let Some(yarn) = &stash.yarn_name {
+                    println!("Yarn: {yarn}");
+                }
+                if let Some(color) = &stash.colorway_name {
+                    println!("Colorway: {color}");
+                }
+                if let Some(sk) = stash.skeins {
+                    println!("Skeins: {sk}");
                 }
             }
         }
@@ -967,9 +1515,19 @@ async fn run_message_command(cli: &Cli, cmd: &MessageCommands) -> Result<(), Cli
             println!("Message {} marked as read.", id);
         }
 
+        MessageCommands::MarkUnread { id } => {
+            client.messages().mark_unread(*id).await?;
+            println!("Message {} marked as unread.", id);
+        }
+
         MessageCommands::Archive { id } => {
             client.messages().archive(*id).await?;
             println!("Message {} archived.", id);
+        }
+
+        MessageCommands::Delete { id } => {
+            client.messages().delete(*id).await?;
+            println!("Message {} deleted.", id);
         }
     }
 
