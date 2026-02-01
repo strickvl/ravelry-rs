@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::client::RavelryClient;
 use crate::error::RavelryError;
 use crate::pagination::{PageParams, Paginator};
-use crate::types::{MessageFull, MessageList};
+use crate::types::{MessageFull, MessageList, MessagePost};
 
 /// Service for message-related API endpoints.
 pub struct MessagesApi<'a> {
@@ -141,6 +141,80 @@ impl<'a> MessagesApi<'a> {
     pub async fn delete(&self, id: u64) -> Result<MessageResponse, RavelryError> {
         let path = format!("messages/{}.json", id);
         let req = self.client.delete(&path);
+        self.client.send_json(req).await
+    }
+
+    /// Send a new message.
+    ///
+    /// Requires the `message-write` OAuth scope.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ravelry::{RavelryClient, auth::BasicAuth};
+    /// use ravelry::types::MessagePost;
+    ///
+    /// # async fn example() -> Result<(), ravelry::RavelryError> {
+    /// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+    /// let message = MessagePost::new()
+    ///     .recipient_username("someuser")
+    ///     .subject("Hello!")
+    ///     .content("Hi there, I love your projects!");
+    ///
+    /// let response = client.messages().create(&message).await?;
+    /// println!("Sent message ID: {}", response.message.id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn create(&self, data: &MessagePost) -> Result<MessageResponse, RavelryError> {
+        let req = self.client.post_data("messages/create.json", data);
+        self.client.send_json(req).await
+    }
+
+    /// Reply to a message.
+    ///
+    /// Requires the `message-write` OAuth scope.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ravelry::{RavelryClient, auth::BasicAuth};
+    /// use ravelry::types::MessagePost;
+    ///
+    /// # async fn example() -> Result<(), ravelry::RavelryError> {
+    /// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+    /// let reply = MessagePost::new()
+    ///     .content("Thanks for your message!");
+    ///
+    /// let response = client.messages().reply(12345, &reply).await?;
+    /// println!("Reply sent with ID: {}", response.message.id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn reply(&self, id: u64, data: &MessagePost) -> Result<MessageResponse, RavelryError> {
+        let path = format!("messages/{}/reply.json", id);
+        let req = self.client.post_data(&path, data);
+        self.client.send_json(req).await
+    }
+
+    /// Unarchive a message.
+    ///
+    /// Moves a message from the archived folder back to the inbox.
+    /// Requires the `message-write` OAuth scope.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ravelry::{RavelryClient, auth::BasicAuth};
+    /// # async fn example() -> Result<(), ravelry::RavelryError> {
+    /// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+    /// client.messages().unarchive(12345).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn unarchive(&self, id: u64) -> Result<MessageResponse, RavelryError> {
+        let path = format!("messages/{}/unarchive.json", id);
+        let req = self.client.post(&path);
         self.client.send_json(req).await
     }
 }

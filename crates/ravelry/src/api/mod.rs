@@ -22,9 +22,14 @@
 //! # }
 //! ```
 
+pub mod bundled_items;
+pub mod bundles;
+pub mod favorites;
+pub mod friends;
 pub mod messages;
 pub mod patterns;
 pub mod projects;
 pub mod root;
 pub mod stash;
+pub mod upload;
 pub mod yarns;

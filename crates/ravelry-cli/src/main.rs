@@ -6,6 +6,9 @@ use clap::{Parser, Subcommand};
 use config::{Config, ConfigError, Profile};
 use ravelry::{
     api::{
+        bundles::BundlesListParams,
+        favorites::FavoritesListParams,
+        friends::FriendsActivityParams,
         messages::{MessageFolder, MessagesListParams},
         patterns::{PatternProjectsParams, PatternSearchParams},
         projects::ProjectsListParams,
@@ -14,7 +17,7 @@ use ravelry::{
     },
     auth::{BasicAuth, OAuth2Auth},
     pagination::collect_all_pages,
-    types::{ProjectPost, StashPost},
+    types::{BookmarkPost, BundlePost, MessagePost, ProjectPost, StashPost, UploadFile},
     RavelryClient, RavelryError, RavelryOAuth2Client,
 };
 use std::time::Duration;
@@ -79,6 +82,22 @@ enum Commands {
     /// Message commands
     #[command(subcommand)]
     Messages(MessageCommands),
+
+    /// Upload commands
+    #[command(subcommand)]
+    Upload(UploadCommands),
+
+    /// Favorites commands
+    #[command(subcommand)]
+    Favorites(FavoriteCommands),
+
+    /// Bundle commands
+    #[command(subcommand)]
+    Bundles(BundleCommands),
+
+    /// Friend commands
+    #[command(subcommand)]
+    Friends(FriendCommands),
 }
 
 #[derive(Subcommand)]
@@ -429,6 +448,206 @@ enum MessageCommands {
         /// Message ID
         id: u64,
     },
+
+    /// Send a new message
+    Send {
+        /// Recipient username
+        #[arg(long)]
+        to: String,
+
+        /// Message subject
+        #[arg(long)]
+        subject: String,
+
+        /// Message content
+        #[arg(long)]
+        content: String,
+    },
+
+    /// Reply to a message
+    Reply {
+        /// Message ID to reply to
+        id: u64,
+
+        /// Reply content
+        #[arg(long)]
+        content: String,
+    },
+
+    /// Unarchive a message
+    Unarchive {
+        /// Message ID
+        id: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum UploadCommands {
+    /// Upload one or more images
+    Image {
+        /// File paths to upload
+        #[arg(required = true)]
+        files: Vec<std::path::PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum FavoriteCommands {
+    /// List favorites for a user
+    List {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Filter by type (pattern, yarn, etc.)
+        #[arg(long)]
+        type_filter: Option<String>,
+
+        /// Page number
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Results per page
+        #[arg(long, default_value = "10")]
+        page_size: u32,
+    },
+
+    /// Show a specific favorite
+    Show {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Favorite ID
+        id: u64,
+    },
+
+    /// Create a new favorite
+    Create {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Type of item to favorite (pattern, yarn, etc.)
+        #[arg(long)]
+        item_type: String,
+
+        /// ID of the item to favorite
+        #[arg(long)]
+        item_id: u64,
+
+        /// Comment on the favorite
+        #[arg(long)]
+        comment: Option<String>,
+    },
+
+    /// Delete a favorite
+    Delete {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Favorite ID
+        id: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum BundleCommands {
+    /// List bundles for a user
+    List {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Page number
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Results per page
+        #[arg(long, default_value = "10")]
+        page_size: u32,
+    },
+
+    /// Show a specific bundle
+    Show {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Bundle ID
+        id: u64,
+    },
+
+    /// Create a new bundle
+    Create {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Bundle name
+        #[arg(long)]
+        name: String,
+
+        /// Make bundle public
+        #[arg(long)]
+        public: bool,
+    },
+
+    /// Delete a bundle
+    Delete {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Bundle ID
+        id: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum FriendCommands {
+    /// List friends for a user
+    List {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+    },
+
+    /// Show friend activity feed
+    Activity {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Page number
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Results per page
+        #[arg(long, default_value = "20")]
+        page_size: u32,
+    },
+
+    /// Add a friend (follow a user)
+    Add {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// User ID of the person to follow
+        friend_user_id: u64,
+    },
+
+    /// Remove a friend (unfollow)
+    Remove {
+        /// Username (uses current user if not specified)
+        #[arg(long)]
+        user: Option<String>,
+
+        /// Friendship ID to remove
+        friendship_id: u64,
+    },
 }
 
 impl Cli {
@@ -604,6 +823,10 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         Commands::Projects(project_cmd) => run_project_command(&cli, project_cmd).await?,
         Commands::Stash(stash_cmd) => run_stash_command(&cli, stash_cmd).await?,
         Commands::Messages(message_cmd) => run_message_command(&cli, message_cmd).await?,
+        Commands::Upload(upload_cmd) => run_upload_command(&cli, upload_cmd).await?,
+        Commands::Favorites(fav_cmd) => run_favorites_command(&cli, fav_cmd).await?,
+        Commands::Bundles(bundle_cmd) => run_bundles_command(&cli, bundle_cmd).await?,
+        Commands::Friends(friend_cmd) => run_friends_command(&cli, friend_cmd).await?,
     }
 
     Ok(())
@@ -1528,6 +1751,333 @@ async fn run_message_command(cli: &Cli, cmd: &MessageCommands) -> Result<(), Cli
         MessageCommands::Delete { id } => {
             client.messages().delete(*id).await?;
             println!("Message {} deleted.", id);
+        }
+
+        MessageCommands::Send {
+            to,
+            subject,
+            content,
+        } => {
+            let message = MessagePost::new()
+                .recipient_username(to)
+                .subject(subject)
+                .content(content);
+
+            let response = client.messages().create(&message).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Message sent! ID: {}", response.message.id);
+            }
+        }
+
+        MessageCommands::Reply { id, content } => {
+            let reply = MessagePost::new().content(content);
+            let response = client.messages().reply(*id, &reply).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Reply sent! ID: {}", response.message.id);
+            }
+        }
+
+        MessageCommands::Unarchive { id } => {
+            client.messages().unarchive(*id).await?;
+            println!("Message {} unarchived.", id);
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_upload_command(cli: &Cli, cmd: &UploadCommands) -> Result<(), CliError> {
+    let client = cli.build_client().await?;
+
+    match cmd {
+        UploadCommands::Image { files } => {
+            // Request upload token
+            let token_resp = client.upload().request_token().await?;
+            println!("Got upload token, uploading {} file(s)...", files.len());
+
+            // Read files
+            let upload_files: Vec<UploadFile> = files
+                .iter()
+                .map(|path| {
+                    let bytes = std::fs::read(path)?;
+                    let filename = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("image")
+                        .to_string();
+                    Ok(UploadFile::new(filename, bytes))
+                })
+                .collect::<Result<Vec<_>, std::io::Error>>()?;
+
+            // Upload
+            let response = client
+                .upload()
+                .image(&token_resp.upload_token, upload_files)
+                .await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Upload complete!");
+                for upload in &response.uploads {
+                    for (key, result) in upload {
+                        println!("  {}: image_id = {}", key, result.image_id);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_favorites_command(cli: &Cli, cmd: &FavoriteCommands) -> Result<(), CliError> {
+    let client = cli.build_client().await?;
+
+    match cmd {
+        FavoriteCommands::List {
+            user,
+            type_filter,
+            page,
+            page_size,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut params = FavoritesListParams::new().page(*page).page_size(*page_size);
+            if let Some(t) = type_filter {
+                params = params.type_filter(t);
+            }
+
+            let response = client.favorites().list(&username, &params).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                if let Some(paginator) = &response.paginator {
+                    println!(
+                        "Favorites (page {}/{}):",
+                        paginator.page, paginator.page_count
+                    );
+                } else {
+                    println!("Favorites:");
+                }
+                for fav in &response.favorites {
+                    let type_name = fav.type_name.as_deref().unwrap_or("unknown");
+                    let comment = fav.comment.as_deref().unwrap_or("");
+                    if comment.is_empty() {
+                        println!("  {} - [{}] #{:?}", fav.id, type_name, fav.favorited_id);
+                    } else {
+                        println!(
+                            "  {} - [{}] #{:?} - {}",
+                            fav.id, type_name, fav.favorited_id, comment
+                        );
+                    }
+                }
+            }
+        }
+
+        FavoriteCommands::Show { user, id } => {
+            let username = resolve_username(&client, user).await?;
+            let response = client.favorites().show(&username, *id).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let fav = &response.favorite;
+                println!("Favorite: {}", fav.id);
+                if let Some(t) = &fav.type_name {
+                    println!("Type: {t}");
+                }
+                if let Some(id) = fav.favorited_id {
+                    println!("Item ID: {id}");
+                }
+                if let Some(c) = &fav.comment {
+                    println!("Comment: {c}");
+                }
+            }
+        }
+
+        FavoriteCommands::Create {
+            user,
+            item_type,
+            item_id,
+            comment,
+        } => {
+            let username = resolve_username(&client, user).await?;
+
+            let mut post = BookmarkPost::new()
+                .type_name(item_type)
+                .favorited_id(*item_id);
+            if let Some(c) = comment {
+                post = post.comment(c);
+            }
+
+            let response = client.favorites().create(&username, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Created favorite: {}", response.favorite.id);
+            }
+        }
+
+        FavoriteCommands::Delete { user, id } => {
+            let username = resolve_username(&client, user).await?;
+            client.favorites().delete(&username, *id).await?;
+            println!("Deleted favorite: {}", id);
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_bundles_command(cli: &Cli, cmd: &BundleCommands) -> Result<(), CliError> {
+    let client = cli.build_client().await?;
+
+    match cmd {
+        BundleCommands::List {
+            user,
+            page,
+            page_size,
+        } => {
+            let username = resolve_username(&client, user).await?;
+            let params = BundlesListParams::new().page(*page).page_size(*page_size);
+            let response = client.bundles().list(&username, &params).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                if let Some(paginator) = &response.paginator {
+                    println!("Bundles (page {}/{}):", paginator.page, paginator.page_count);
+                } else {
+                    println!("Bundles:");
+                }
+                for bundle in &response.bundles {
+                    let name = bundle.name.as_deref().unwrap_or("Unnamed");
+                    let count = bundle.bundled_items_count.unwrap_or(0);
+                    println!("  {} - {} ({} items)", bundle.id, name, count);
+                }
+            }
+        }
+
+        BundleCommands::Show { user, id } => {
+            let username = resolve_username(&client, user).await?;
+            let response = client.bundles().show(&username, *id).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                let bundle = &response.bundle;
+                println!("Bundle: {}", bundle.id);
+                if let Some(name) = &bundle.name {
+                    println!("Name: {name}");
+                }
+                if let Some(count) = bundle.bundled_items_count {
+                    println!("Items: {count}");
+                }
+                if let Some(public) = bundle.is_public {
+                    println!("Public: {}", if public { "Yes" } else { "No" });
+                }
+            }
+        }
+
+        BundleCommands::Create { user, name, public } => {
+            let username = resolve_username(&client, user).await?;
+
+            let post = BundlePost::new().name(name).is_public(*public);
+            let response = client.bundles().create(&username, &post).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Created bundle: {} (ID: {})", name, response.bundle.id);
+            }
+        }
+
+        BundleCommands::Delete { user, id } => {
+            let username = resolve_username(&client, user).await?;
+            client.bundles().delete(&username, *id).await?;
+            println!("Deleted bundle: {}", id);
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_friends_command(cli: &Cli, cmd: &FriendCommands) -> Result<(), CliError> {
+    let client = cli.build_client().await?;
+
+    match cmd {
+        FriendCommands::List { user } => {
+            let username = resolve_username(&client, user).await?;
+            let response = client.friends().list(&username).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Friends:");
+                for friendship in &response.friendships {
+                    let friend_name = friendship
+                        .friend
+                        .as_ref()
+                        .map(|f| f.username.as_str())
+                        .unwrap_or("Unknown");
+                    let mutual = if friendship.mutual.unwrap_or(false) {
+                        " [mutual]"
+                    } else {
+                        ""
+                    };
+                    println!("  {} - {}{}", friendship.id, friend_name, mutual);
+                }
+            }
+        }
+
+        FriendCommands::Activity {
+            user,
+            page,
+            page_size,
+        } => {
+            let username = resolve_username(&client, user).await?;
+            let params = FriendsActivityParams::new().page(*page).page_size(*page_size);
+            let response = client.friends().activity(&username, &params).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Friend Activity:");
+                for activity in &response.activity {
+                    let activity_type = activity.activity_type.as_deref().unwrap_or("unknown");
+                    let user_name = activity
+                        .user
+                        .as_ref()
+                        .map(|u| u.username.as_str())
+                        .unwrap_or("Unknown");
+                    println!("  [{activity_type}] by {user_name}");
+                }
+            }
+        }
+
+        FriendCommands::Add { user, friend_user_id } => {
+            let username = resolve_username(&client, user).await?;
+            let response = client.friends().create(&username, *friend_user_id).await?;
+
+            if cli.json_output() {
+                cli.print_json(&response)?;
+            } else {
+                println!("Added friend! Friendship ID: {}", response.friendship.id);
+            }
+        }
+
+        FriendCommands::Remove { user, friendship_id } => {
+            let username = resolve_username(&client, user).await?;
+            client.friends().destroy(&username, *friendship_id).await?;
+            println!("Removed friendship: {}", friendship_id);
         }
     }
 

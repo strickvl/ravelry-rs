@@ -46,6 +46,14 @@ pub enum RavelryError {
     /// JSON deserialization error.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// Invalid request parameters.
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
+
+    /// I/O error (e.g., reading files for upload).
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 impl RavelryError {

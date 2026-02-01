@@ -5,12 +5,23 @@ use serde::de::DeserializeOwned;
 use url::Url;
 
 use crate::api::{
-    messages::MessagesApi, patterns::PatternsApi, projects::ProjectsApi, root::RootApi,
-    stash::StashApi, yarns::YarnsApi,
+    bundles::BundlesApi, bundled_items::BundledItemsApi, favorites::FavoritesApi,
+    friends::FriendsApi, messages::MessagesApi, patterns::PatternsApi, projects::ProjectsApi,
+    root::RootApi, stash::StashApi, upload::UploadApi, yarns::YarnsApi,
 };
 use crate::auth::{AuthKind, Authenticator, NoAuth};
 use crate::error::{map_error_response, RavelryError};
 use crate::request_options::RequestOptions;
+
+/// Controls whether authentication is applied to a request.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) enum AuthMode {
+    /// Apply the configured authenticator (default behavior).
+    #[default]
+    Default,
+    /// Do not apply authentication (for unauthenticated endpoints like upload/image).
+    None,
+}
 
 /// The default Ravelry API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.ravelry.com/";
@@ -92,6 +103,31 @@ impl RavelryClient {
         MessagesApi { client: self }
     }
 
+    /// Access upload-related endpoints.
+    pub fn upload(&self) -> UploadApi<'_> {
+        UploadApi { client: self }
+    }
+
+    /// Access favorites-related endpoints.
+    pub fn favorites(&self) -> FavoritesApi<'_> {
+        FavoritesApi { client: self }
+    }
+
+    /// Access bundles-related endpoints.
+    pub fn bundles(&self) -> BundlesApi<'_> {
+        BundlesApi { client: self }
+    }
+
+    /// Access bundled items endpoints.
+    pub fn bundled_items(&self) -> BundledItemsApi<'_> {
+        BundledItemsApi { client: self }
+    }
+
+    /// Access friends-related endpoints.
+    pub fn friends(&self) -> FriendsApi<'_> {
+        FriendsApi { client: self }
+    }
+
     // --- Internal Request Helpers ---
 
     /// Create a GET request for the given path.
@@ -115,6 +151,20 @@ impl RavelryClient {
         self.request(reqwest::Method::PUT, path)
     }
 
+    /// Create a GET request without authentication.
+    ///
+    /// Used for endpoints like upload status that don't require auth.
+    pub(crate) fn get_no_auth(&self, path: &str) -> RequestBuilder {
+        self.request_with_auth(reqwest::Method::GET, path, AuthMode::None)
+    }
+
+    /// Create a POST request without authentication.
+    ///
+    /// Used for endpoints like upload/image that explicitly don't use auth.
+    pub(crate) fn post_no_auth(&self, path: &str) -> RequestBuilder {
+        self.request_with_auth(reqwest::Method::POST, path, AuthMode::None)
+    }
+
     /// Create a POST request with the common `{ "data": ... }` wrapper.
     ///
     /// Many Ravelry endpoints expect mutations to be wrapped in a `data` field.
@@ -127,13 +177,25 @@ impl RavelryClient {
         self.post(path).json(&Wrapper { data })
     }
 
-    /// Create a request for the given method and path.
+    /// Create a request for the given method and path (with default auth).
     fn request(&self, method: reqwest::Method, path: &str) -> RequestBuilder {
+        self.request_with_auth(method, path, AuthMode::Default)
+    }
+
+    /// Create a request with explicit auth mode control.
+    fn request_with_auth(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        auth_mode: AuthMode,
+    ) -> RequestBuilder {
         let url = self.base_url.join(path).expect("Invalid path");
         let mut req = self.http.request(method, url);
 
-        // Apply authentication
-        req = self.auth.apply(req);
+        // Apply authentication only if requested
+        if matches!(auth_mode, AuthMode::Default) {
+            req = self.auth.apply(req);
+        }
 
         // Apply default options
         if self.defaults.debug {
