@@ -13,6 +13,16 @@ path = "src/main.rs"
 [dependencies]
 ravelry = { path = "../ravelry" }
 clap = { version = "4", features = ["derive", "env"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Config and OAuth flow
+toml = "0.8"
+directories = "5"
+open = "5"
+
+# HTTPS callback server for OAuth2
+rcgen = "0.13"
+tokio-rustls = "0.26"
+rustls-pemfile = "2"

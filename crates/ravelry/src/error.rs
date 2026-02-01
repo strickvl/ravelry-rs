@@ -99,7 +99,9 @@ pub(crate) async fn map_error_response(resp: reqwest::Response) -> RavelryError 
 
     // Try to parse body as JSON, fallback to raw text
     let body = match resp.text().await {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "raw": text })),
+        Ok(text) => {
+            serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "raw": text }))
+        }
         Err(_) => serde_json::json!({ "error": "Failed to read response body" }),
     };
 

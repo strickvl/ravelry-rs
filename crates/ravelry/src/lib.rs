@@ -33,4 +33,4 @@ pub use error::RavelryError;
 pub use pagination::{PageParams, Paginator};
 
 // Re-export auth types
-pub use auth::{AuthKind, Authenticator, BasicAuth};
+pub use auth::{AuthKind, Authenticator, BasicAuth, OAuth2Auth, OAuth2Token, RavelryOAuth2Client};

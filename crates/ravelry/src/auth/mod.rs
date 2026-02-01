@@ -4,11 +4,21 @@
 //!
 //! - **Basic Auth (Read-only)**: Access key + secret key for unauthenticated endpoints only
 //! - **Basic Auth (Personal)**: Access key + personal key for full access to personal data
-//! - **OAuth2**: For third-party applications (implemented in Phase 2)
+//! - **OAuth2**: For third-party applications with user authorization
+//!
+//! # Choosing an Authentication Method
+//!
+//! | Method | Use Case | Tokens Expire? |
+//! |--------|----------|----------------|
+//! | Basic (Read-only) | Public data only, no user context | No |
+//! | Basic (Personal) | Personal scripts, full access to your account | No |
+//! | OAuth2 | Third-party apps, accessing other users' data | Yes (24h) |
 
 mod basic;
+mod oauth2;
 
 pub use basic::BasicAuth;
+pub use oauth2::{OAuth2Auth, OAuth2Token, RavelryOAuth2Client};
 use reqwest::RequestBuilder;
 
 /// The type of authentication being used.

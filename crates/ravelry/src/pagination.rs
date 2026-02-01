@@ -85,3 +85,81 @@ impl Paginator {
         }
     }
 }
+
+/// Collect all pages from a paginated endpoint.
+///
+/// This is a helper for CLI `--all` flags and similar use cases where you
+/// want to fetch all results regardless of pagination.
+///
+/// # Arguments
+///
+/// * `initial_page_size` - Number of results per page (used for all requests)
+/// * `max_pages` - Optional limit on the number of pages to fetch
+/// * `fetch` - An async function that takes page params and returns (items, paginator)
+///
+/// # Example
+///
+/// ```no_run
+/// # use ravelry::{RavelryClient, auth::BasicAuth, PageParams, RavelryError};
+/// # use ravelry::pagination::collect_all_pages;
+/// use ravelry::api::patterns::PatternSearchParams;
+///
+/// # async fn example() -> Result<(), RavelryError> {
+/// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+/// let all_patterns = collect_all_pages(50, None, |page_params| {
+///     let client = &client; // Borrow the client
+///     let params = PatternSearchParams {
+///         query: Some("baby blanket".to_string()),
+///         page: page_params,
+///         ..Default::default()
+///     };
+///     async move {
+///         let resp = client.patterns().search(&params).await?;
+///         Ok((resp.patterns, resp.paginator))
+///     }
+/// }).await?;
+///
+/// println!("Found {} patterns total", all_patterns.len());
+/// # Ok(())
+/// # }
+/// ```
+pub async fn collect_all_pages<T, F, Fut>(
+    initial_page_size: u32,
+    max_pages: Option<u32>,
+    fetch: F,
+) -> Result<Vec<T>, crate::RavelryError>
+where
+    F: Fn(PageParams) -> Fut,
+    Fut: std::future::Future<Output = Result<(Vec<T>, Paginator), crate::RavelryError>>,
+{
+    let mut all_items = Vec::new();
+    let mut current_page = 1u32;
+    let mut pages_fetched = 0u32;
+
+    loop {
+        // Check if we've hit the max pages limit
+        if let Some(max) = max_pages {
+            if pages_fetched >= max {
+                break;
+            }
+        }
+
+        let page_params = PageParams {
+            page: Some(current_page),
+            page_size: Some(initial_page_size),
+        };
+
+        let (items, paginator) = fetch(page_params).await?;
+        all_items.extend(items);
+        pages_fetched += 1;
+
+        // Check if there are more pages
+        if paginator.has_next() {
+            current_page = paginator.page + 1;
+        } else {
+            break;
+        }
+    }
+
+    Ok(all_items)
+}

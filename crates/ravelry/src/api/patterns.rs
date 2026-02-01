@@ -39,7 +39,10 @@ impl<'a> PatternsApi<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn search(&self, params: &PatternSearchParams) -> Result<PatternsSearchResponse, RavelryError> {
+    pub async fn search(
+        &self,
+        params: &PatternSearchParams,
+    ) -> Result<PatternsSearchResponse, RavelryError> {
         let req = self.client.get("patterns/search.json").query(params);
         self.client.send_json(req).await
     }

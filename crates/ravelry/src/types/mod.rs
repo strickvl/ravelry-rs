@@ -10,11 +10,19 @@
 //! making them resilient to API changes.
 
 pub mod common;
+pub mod message;
 pub mod pattern;
 pub mod photo;
+pub mod project;
+pub mod stash;
 pub mod user;
+pub mod yarn;
 
 pub use common::*;
+pub use message::*;
 pub use pattern::*;
 pub use photo::*;
+pub use project::*;
+pub use stash::*;
 pub use user::*;
+pub use yarn::*;

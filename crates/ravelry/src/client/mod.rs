@@ -4,7 +4,10 @@ use reqwest::RequestBuilder;
 use serde::de::DeserializeOwned;
 use url::Url;
 
-use crate::api::{patterns::PatternsApi, root::RootApi};
+use crate::api::{
+    messages::MessagesApi, patterns::PatternsApi, projects::ProjectsApi, root::RootApi,
+    stash::StashApi, yarns::YarnsApi,
+};
 use crate::auth::{AuthKind, Authenticator, NoAuth};
 use crate::error::{map_error_response, RavelryError};
 use crate::request_options::RequestOptions;
@@ -69,17 +72,74 @@ impl RavelryClient {
         PatternsApi { client: self }
     }
 
+    /// Access yarn-related endpoints.
+    pub fn yarns(&self) -> YarnsApi<'_> {
+        YarnsApi { client: self }
+    }
+
+    /// Access project-related endpoints.
+    pub fn projects(&self) -> ProjectsApi<'_> {
+        ProjectsApi { client: self }
+    }
+
+    /// Access stash-related endpoints.
+    pub fn stash(&self) -> StashApi<'_> {
+        StashApi { client: self }
+    }
+
+    /// Access message-related endpoints.
+    pub fn messages(&self) -> MessagesApi<'_> {
+        MessagesApi { client: self }
+    }
+
     // --- Internal Request Helpers ---
 
     /// Create a GET request for the given path.
     pub(crate) fn get(&self, path: &str) -> RequestBuilder {
+        self.request(reqwest::Method::GET, path)
+    }
+
+    /// Create a POST request for the given path.
+    pub(crate) fn post(&self, path: &str) -> RequestBuilder {
+        self.request(reqwest::Method::POST, path)
+    }
+
+    /// Create a DELETE request for the given path.
+    pub(crate) fn delete(&self, path: &str) -> RequestBuilder {
+        self.request(reqwest::Method::DELETE, path)
+    }
+
+    /// Create a PUT request for the given path.
+    #[allow(dead_code)]
+    pub(crate) fn put(&self, path: &str) -> RequestBuilder {
+        self.request(reqwest::Method::PUT, path)
+    }
+
+    /// Create a POST request with the common `{ "data": ... }` wrapper.
+    ///
+    /// Many Ravelry endpoints expect mutations to be wrapped in a `data` field.
+    pub(crate) fn post_data<T: serde::Serialize>(&self, path: &str, data: &T) -> RequestBuilder {
+        #[derive(serde::Serialize)]
+        struct Wrapper<'a, T: serde::Serialize> {
+            data: &'a T,
+        }
+
+        self.post(path).json(&Wrapper { data })
+    }
+
+    /// Create a request for the given method and path.
+    fn request(&self, method: reqwest::Method, path: &str) -> RequestBuilder {
         let url = self.base_url.join(path).expect("Invalid path");
-        let mut req = self.http.get(url);
+        let mut req = self.http.request(method, url);
 
         // Apply authentication
         req = self.auth.apply(req);
 
         // Apply default options
+        if self.defaults.debug {
+            req = req.query(&[("debug", "1")]);
+        }
+
         if let Some(ref etag) = self.defaults.if_none_match {
             req = req.header("If-None-Match", etag);
         }
@@ -96,6 +156,18 @@ impl RavelryClient {
 
         if resp.status().is_success() {
             Ok(resp.json().await?)
+        } else {
+            Err(map_error_response(resp).await)
+        }
+    }
+
+    /// Send a request that returns an empty response (for DELETE, mark_read, etc.).
+    #[allow(dead_code)]
+    pub(crate) async fn send_empty(&self, req: RequestBuilder) -> Result<(), RavelryError> {
+        let resp = req.send().await?;
+
+        if resp.status().is_success() {
+            Ok(())
         } else {
             Err(map_error_response(resp).await)
         }
@@ -161,7 +233,11 @@ impl RavelryClientBuilder {
     /// Build the client.
     pub fn build(self) -> Result<RavelryClient, RavelryError> {
         let http = reqwest::Client::builder()
-            .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!(
+                env!("CARGO_PKG_NAME"),
+                "/",
+                env!("CARGO_PKG_VERSION")
+            ))
             .build()?;
 
         Ok(RavelryClient {
