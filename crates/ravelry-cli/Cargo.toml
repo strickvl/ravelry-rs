@@ -1,0 +1,18 @@
+[package]
+name = "ravelry-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line interface for the Ravelry API"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/strickvl/ravelry-rs"
+
+[[bin]]
+name = "ravelry"
+path = "src/main.rs"
+
+[dependencies]
+ravelry = { path = "../ravelry" }
+clap = { version = "4", features = ["derive", "env"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -1,0 +1,125 @@
+//! Pattern-related API endpoints.
+//!
+//! Patterns are knitting/crochet instructions for creating items.
+
+use serde::{Deserialize, Serialize};
+
+use crate::client::RavelryClient;
+use crate::error::RavelryError;
+use crate::pagination::{PageParams, Paginator};
+use crate::types::PatternList;
+
+/// Service for pattern-related API endpoints.
+pub struct PatternsApi<'a> {
+    pub(crate) client: &'a RavelryClient,
+}
+
+impl<'a> PatternsApi<'a> {
+    /// Search for patterns.
+    ///
+    /// This is one of the most commonly used endpoints. You can search by
+    /// query string and filter by various criteria.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ravelry::{RavelryClient, auth::BasicAuth};
+    /// use ravelry::api::patterns::PatternSearchParams;
+    ///
+    /// # async fn example() -> Result<(), ravelry::RavelryError> {
+    /// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+    /// let params = PatternSearchParams::new()
+    ///     .query("baby blanket")
+    ///     .page_size(10);
+    ///
+    /// let response = client.patterns().search(&params).await?;
+    /// for pattern in response.patterns {
+    ///     println!("{}: {}", pattern.id, pattern.name);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn search(&self, params: &PatternSearchParams) -> Result<PatternsSearchResponse, RavelryError> {
+        let req = self.client.get("patterns/search.json").query(params);
+        self.client.send_json(req).await
+    }
+}
+
+/// Parameters for pattern search.
+///
+/// Use the builder methods to construct search parameters.
+#[derive(Serialize, Default, Debug, Clone)]
+pub struct PatternSearchParams {
+    /// Free-text search query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+
+    /// Pagination parameters.
+    #[serde(flatten)]
+    pub page: PageParams,
+
+    /// Include personal attributes in the response (requires auth).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub personal_attributes: Option<bool>,
+
+    /// Filter by craft type (e.g., "knitting", "crochet").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub craft: Option<String>,
+
+    /// Sort order (e.g., "best_match", "recently_popular", "date").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+}
+
+impl PatternSearchParams {
+    /// Create new search params with defaults.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the search query.
+    pub fn query(mut self, query: impl Into<String>) -> Self {
+        self.query = Some(query.into());
+        self
+    }
+
+    /// Set the page number.
+    pub fn page(mut self, page: u32) -> Self {
+        self.page.page = Some(page);
+        self
+    }
+
+    /// Set the page size.
+    pub fn page_size(mut self, size: u32) -> Self {
+        self.page.page_size = Some(size);
+        self
+    }
+
+    /// Include personal attributes (requires authentication).
+    pub fn personal_attributes(mut self, include: bool) -> Self {
+        self.personal_attributes = Some(include);
+        self
+    }
+
+    /// Filter by craft type (e.g., "knitting", "crochet").
+    pub fn craft(mut self, craft: impl Into<String>) -> Self {
+        self.craft = Some(craft.into());
+        self
+    }
+
+    /// Set the sort order.
+    pub fn sort(mut self, sort: impl Into<String>) -> Self {
+        self.sort = Some(sort.into());
+        self
+    }
+}
+
+/// Response from pattern search.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct PatternsSearchResponse {
+    /// The list of patterns matching the search.
+    pub patterns: Vec<PatternList>,
+
+    /// Pagination information.
+    pub paginator: Paginator,
+}
