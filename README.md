@@ -14,6 +14,31 @@ Ravelry is a community site for knitters and crocheters, and this library provid
 
 ## Installation
 
+### CLI (Prebuilt Binaries)
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/strickvl/ravelry-rs/releases):
+
+| Platform | File |
+|----------|------|
+| Linux (x86_64) | `ravelry-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS (Intel) | `ravelry-vX.Y.Z-x86_64-apple-darwin.tar.gz` |
+| macOS (Apple Silicon) | `ravelry-vX.Y.Z-aarch64-apple-darwin.tar.gz` |
+| Windows (x86_64) | `ravelry-vX.Y.Z-x86_64-pc-windows-msvc.zip` |
+
+```bash
+# Example for Linux/macOS:
+tar -xzf ravelry-vX.Y.Z-<target>.tar.gz
+chmod +x ravelry
+sudo mv ravelry /usr/local/bin/
+
+# Verify installation
+ravelry --help
+```
+
+You can verify your download using the `SHA256SUMS.txt` file included in each release.
+
+### Library (Cargo)
+
 Add to your `Cargo.toml`:
 
 ```toml
