@@ -9,6 +9,9 @@ const MAX_RETRIES_PER_PAGE: u32 = 5;
 /// Default backoff when the Retry-After header is missing.
 const DEFAULT_BACKOFF: Duration = Duration::from_secs(5);
 
+/// Polite delay between consecutive page fetches (to avoid hammering the API).
+const INTER_PAGE_DELAY: Duration = Duration::from_millis(500);
+
 /// Parameters for paginated requests.
 ///
 /// # Example
@@ -240,6 +243,8 @@ where
 
         if paginator.has_next() {
             current_page = paginator.page + 1;
+            // Be a good API citizen: wait between requests
+            tokio::time::sleep(INTER_PAGE_DELAY).await;
         } else {
             break;
         }

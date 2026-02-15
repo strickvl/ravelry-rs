@@ -58,10 +58,18 @@ pub enum RavelryError {
 
 impl RavelryError {
     /// Returns `true` if this error is retryable.
+    ///
+    /// Retryable errors include rate limiting, network timeouts/connection
+    /// failures, and response decode errors (which can be transient — e.g.,
+    /// a truncated response from a server under load).
     pub fn is_retryable(&self) -> bool {
         match self {
             RavelryError::RateLimited { .. } => true,
-            RavelryError::Http(e) if e.is_timeout() || e.is_connect() => true,
+            RavelryError::Http(e)
+                if e.is_timeout() || e.is_connect() || e.is_decode() || e.is_body() =>
+            {
+                true
+            }
             _ => false,
         }
     }
