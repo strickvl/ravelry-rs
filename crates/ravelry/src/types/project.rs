@@ -14,8 +14,9 @@ pub struct ProjectSmall {
     /// Unique project ID.
     pub id: u64,
 
-    /// Project name.
-    pub name: String,
+    /// Project name (null for some projects where the user left it blank).
+    #[serde(default)]
+    pub name: Option<String>,
 
     /// URL-friendly unique identifier.
     pub permalink: String,
@@ -63,8 +64,9 @@ pub struct ProjectFull {
     /// Unique project ID.
     pub id: u64,
 
-    /// Project name.
-    pub name: String,
+    /// Project name (null for some projects where the user left it blank).
+    #[serde(default)]
+    pub name: Option<String>,
 
     /// URL-friendly unique identifier.
     pub permalink: String,

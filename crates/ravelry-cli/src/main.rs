@@ -1186,7 +1186,8 @@ async fn run_pattern_command(cli: &Cli, cmd: &PatternCommands) -> Result<(), Cli
                     println!("Found {} projects total", all_projects.len());
                     for project in &all_projects {
                         let status = project.status_name.as_deref().unwrap_or("Unknown");
-                        println!("  {} - {} [{}]", project.id, project.name, status);
+                        let name = project.name.as_deref().unwrap_or("(untitled)");
+                        println!("  {} - {} [{}]", project.id, name, status);
                     }
                 }
             } else {
@@ -1206,7 +1207,8 @@ async fn run_pattern_command(cli: &Cli, cmd: &PatternCommands) -> Result<(), Cli
 
                     for project in &response.projects {
                         let status = project.status_name.as_deref().unwrap_or("Unknown");
-                        println!("  {} - {} [{}]", project.id, project.name, status);
+                        let name = project.name.as_deref().unwrap_or("(untitled)");
+                        println!("  {} - {} [{}]", project.id, name, status);
                     }
                 }
             }
@@ -1373,7 +1375,8 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                     println!("Found {} projects total", all_projects.len());
                     for project in &all_projects {
                         let status = project.status_name.as_deref().unwrap_or("Unknown");
-                        println!("  {} - {} [{}]", project.id, project.name, status);
+                        let name = project.name.as_deref().unwrap_or("(untitled)");
+                        println!("  {} - {} [{}]", project.id, name, status);
                     }
                 }
             } else {
@@ -1393,7 +1396,8 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
 
                     for project in &response.projects {
                         let status = project.status_name.as_deref().unwrap_or("Unknown");
-                        println!("  {} - {} [{}]", project.id, project.name, status);
+                        let name = project.name.as_deref().unwrap_or("(untitled)");
+                        println!("  {} - {} [{}]", project.id, name, status);
                     }
                 }
             }
@@ -1410,7 +1414,10 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                 cli.print_json(&response)?;
             } else {
                 let project = &response.project;
-                println!("Project: {}", project.name);
+                println!(
+                    "Project: {}",
+                    project.name.as_deref().unwrap_or("(untitled)")
+                );
                 println!("ID: {}", project.id);
                 if let Some(pattern) = &project.pattern_name {
                     println!("Pattern: {pattern}");
@@ -1450,7 +1457,11 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                 cli.print_json(&response)?;
             } else {
                 let project = &response.project;
-                println!("Created project: {} (ID: {})", project.name, project.id);
+                println!(
+                    "Created project: {} (ID: {})",
+                    project.name.as_deref().unwrap_or("(untitled)"),
+                    project.id
+                );
                 if let Some(status) = &project.status_name {
                     println!("Status: {status}");
                 }
@@ -1487,7 +1498,11 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
                 cli.print_json(&response)?;
             } else {
                 let project = &response.project;
-                println!("Updated project: {} (ID: {})", project.name, project.id);
+                println!(
+                    "Updated project: {} (ID: {})",
+                    project.name.as_deref().unwrap_or("(untitled)"),
+                    project.id
+                );
                 if let Some(status) = &project.status_name {
                     println!("Status: {status}");
                 }

@@ -28,7 +28,7 @@ impl<'a> ProjectsApi<'a> {
     /// let params = ProjectsListParams::new().page_size(10);
     /// let response = client.projects().list("username", &params).await?;
     /// for project in response.projects {
-    ///     println!("{}: {}", project.id, project.name);
+    ///     println!("{}: {}", project.id, project.name.as_deref().unwrap_or("(untitled)"));
     /// }
     /// # Ok(())
     /// # }
@@ -54,7 +54,7 @@ impl<'a> ProjectsApi<'a> {
     /// # async fn example() -> Result<(), ravelry::RavelryError> {
     /// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
     /// let response = client.projects().show("username", "1", &Default::default()).await?;
-    /// println!("Project: {}", response.project.name);
+    /// println!("Project: {}", response.project.name.as_deref().unwrap_or("(untitled)"));
     /// # Ok(())
     /// # }
     /// ```

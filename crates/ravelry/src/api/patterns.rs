@@ -79,7 +79,7 @@ impl<'a> PatternsApi<'a> {
     /// let params = PatternProjectsParams::new().page_size(10);
     /// let response = client.patterns().projects(123456, &params).await?;
     /// for project in response.projects {
-    ///     println!("{}: {}", project.id, project.name);
+    ///     println!("{}: {}", project.id, project.name.as_deref().unwrap_or("(untitled)"));
     /// }
     /// # Ok(())
     /// # }
