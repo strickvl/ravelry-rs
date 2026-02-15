@@ -16,9 +16,12 @@ thiserror = "2"
 url = "2"
 time = { version = "0.3", features = ["serde", "parsing", "formatting"] }
 
+# Async runtime (for retry backoff in pagination)
+tokio = { version = "1", features = ["time"] }
+
 # OAuth2 support
 oauth2 = "5"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 wiremock = "0.6"

@@ -1,6 +1,13 @@
 //! Pagination types for Ravelry API requests and responses.
 
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+/// Maximum retries per page when hitting rate limits.
+const MAX_RETRIES_PER_PAGE: u32 = 5;
+
+/// Default backoff when the Retry-After header is missing.
+const DEFAULT_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Parameters for paginated requests.
 ///
@@ -86,10 +93,23 @@ impl Paginator {
     }
 }
 
+/// Progress info passed to the callback after each successful page fetch.
+#[derive(Debug, Clone)]
+pub struct PageProgress {
+    /// The page just fetched (1-indexed).
+    pub current_page: u32,
+    /// Total pages available (from the paginator).
+    pub total_pages: u32,
+    /// Total items collected so far.
+    pub items_so_far: usize,
+    /// Total results reported by the API.
+    pub total_results: u32,
+}
+
 /// Collect all pages from a paginated endpoint.
 ///
-/// This is a helper for CLI `--all` flags and similar use cases where you
-/// want to fetch all results regardless of pagination.
+/// Automatically retries on rate-limit (429) errors using the `Retry-After`
+/// header, with exponential backoff. Up to 5 retries per page.
 ///
 /// # Arguments
 ///
@@ -132,12 +152,55 @@ where
     F: Fn(PageParams) -> Fut,
     Fut: std::future::Future<Output = Result<(Vec<T>, Paginator), crate::RavelryError>>,
 {
+    collect_all_pages_with_progress(initial_page_size, max_pages, fetch, |_| {}).await
+}
+
+/// Like [`collect_all_pages`], but calls `on_progress` after each successful page.
+///
+/// This is useful for CLIs that want to show progress (e.g., "Fetching page 5/930...").
+///
+/// # Example
+///
+/// ```no_run
+/// # use ravelry::{RavelryClient, auth::BasicAuth, PageParams, RavelryError};
+/// # use ravelry::pagination::collect_all_pages_with_progress;
+/// use ravelry::api::patterns::PatternSearchParams;
+///
+/// # async fn example() -> Result<(), RavelryError> {
+/// # let client = RavelryClient::builder(BasicAuth::new("", "")).build()?;
+/// let all_patterns = collect_all_pages_with_progress(50, None, |page_params| {
+///     let client = &client;
+///     let params = PatternSearchParams {
+///         query: Some("baby blanket".to_string()),
+///         page: page_params,
+///         ..Default::default()
+///     };
+///     async move {
+///         let resp = client.patterns().search(&params).await?;
+///         Ok((resp.patterns, resp.paginator))
+///     }
+/// }, |progress| {
+///     eprintln!("Page {}/{} ({} items)", progress.current_page, progress.total_pages, progress.items_so_far);
+/// }).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn collect_all_pages_with_progress<T, F, Fut, P>(
+    initial_page_size: u32,
+    max_pages: Option<u32>,
+    fetch: F,
+    on_progress: P,
+) -> Result<Vec<T>, crate::RavelryError>
+where
+    F: Fn(PageParams) -> Fut,
+    Fut: std::future::Future<Output = Result<(Vec<T>, Paginator), crate::RavelryError>>,
+    P: Fn(&PageProgress),
+{
     let mut all_items = Vec::new();
     let mut current_page = 1u32;
     let mut pages_fetched = 0u32;
 
     loop {
-        // Check if we've hit the max pages limit
         if let Some(max) = max_pages {
             if pages_fetched >= max {
                 break;
@@ -149,11 +212,32 @@ where
             page_size: Some(initial_page_size),
         };
 
-        let (items, paginator) = fetch(page_params).await?;
+        // Fetch with retry on rate-limit errors
+        let mut retries = 0u32;
+        let (items, paginator) = loop {
+            match fetch(page_params.clone()).await {
+                Ok(result) => break result,
+                Err(e) if e.is_retryable() && retries < MAX_RETRIES_PER_PAGE => {
+                    let base_wait = e.retry_after().unwrap_or(DEFAULT_BACKOFF);
+                    // Scale wait by retry count for exponential backoff
+                    let wait = base_wait * (retries + 1);
+                    tokio::time::sleep(wait).await;
+                    retries += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        };
+
         all_items.extend(items);
         pages_fetched += 1;
 
-        // Check if there are more pages
+        on_progress(&PageProgress {
+            current_page,
+            total_pages: paginator.last_page,
+            items_so_far: all_items.len(),
+            total_results: paginator.results,
+        });
+
         if paginator.has_next() {
             current_page = paginator.page + 1;
         } else {

@@ -16,7 +16,7 @@ use ravelry::{
         yarns::YarnSearchParams,
     },
     auth::{BasicAuth, OAuth2Auth},
-    pagination::collect_all_pages,
+    pagination::collect_all_pages_with_progress,
     types::{BookmarkPost, BundlePost, MessagePost, ProjectPost, StashPost, UploadFile},
     RavelryClient, RavelryError, RavelryOAuth2Client,
 };
@@ -1038,25 +1038,35 @@ async fn run_pattern_command(cli: &Cli, cmd: &PatternCommands) -> Result<(), Cli
             all,
         } => {
             if *all {
-                let all_patterns = collect_all_pages(*page_size, None, |page_params| {
-                    let client = &client;
-                    let query = query.clone();
-                    let craft = craft.clone();
-                    async move {
-                        let mut params = PatternSearchParams {
-                            page: page_params,
-                            ..Default::default()
-                        };
-                        if let Some(q) = query {
-                            params = params.query(q);
+                let all_patterns = collect_all_pages_with_progress(
+                    *page_size,
+                    None,
+                    |page_params| {
+                        let client = &client;
+                        let query = query.clone();
+                        let craft = craft.clone();
+                        async move {
+                            let mut params = PatternSearchParams {
+                                page: page_params,
+                                ..Default::default()
+                            };
+                            if let Some(q) = query {
+                                params = params.query(q);
+                            }
+                            if let Some(c) = craft {
+                                params = params.craft(c);
+                            }
+                            let resp = client.patterns().search(&params).await?;
+                            Ok((resp.patterns, resp.paginator))
                         }
-                        if let Some(c) = craft {
-                            params = params.craft(c);
-                        }
-                        let resp = client.patterns().search(&params).await?;
-                        Ok((resp.patterns, resp.paginator))
-                    }
-                })
+                    },
+                    |progress| {
+                        eprintln!(
+                            "Fetching page {}/{}... ({} patterns so far)",
+                            progress.current_page, progress.total_pages, progress.items_so_far
+                        );
+                    },
+                )
                 .await?;
 
                 if cli.json_output() {
@@ -1146,18 +1156,28 @@ async fn run_pattern_command(cli: &Cli, cmd: &PatternCommands) -> Result<(), Cli
             all,
         } => {
             if *all {
-                let all_projects = collect_all_pages(*page_size, None, |page_params| {
-                    let client = &client;
-                    let id = *id;
-                    async move {
-                        let params = PatternProjectsParams {
-                            page: page_params,
-                            ..Default::default()
-                        };
-                        let resp = client.patterns().projects(id, &params).await?;
-                        Ok((resp.projects, resp.paginator))
-                    }
-                })
+                let all_projects = collect_all_pages_with_progress(
+                    *page_size,
+                    None,
+                    |page_params| {
+                        let client = &client;
+                        let id = *id;
+                        async move {
+                            let params = PatternProjectsParams {
+                                page: page_params,
+                                ..Default::default()
+                            };
+                            let resp = client.patterns().projects(id, &params).await?;
+                            Ok((resp.projects, resp.paginator))
+                        }
+                    },
+                    |progress| {
+                        eprintln!(
+                            "Fetching page {}/{}... ({} projects so far)",
+                            progress.current_page, progress.total_pages, progress.items_so_far
+                        );
+                    },
+                )
                 .await?;
 
                 if cli.json_output() {
@@ -1207,21 +1227,31 @@ async fn run_yarn_command(cli: &Cli, cmd: &YarnCommands) -> Result<(), CliError>
             all,
         } => {
             if *all {
-                let all_yarns = collect_all_pages(*page_size, None, |page_params| {
-                    let client = &client;
-                    let query = query.clone();
-                    async move {
-                        let mut params = YarnSearchParams {
-                            page: page_params,
-                            ..Default::default()
-                        };
-                        if let Some(q) = query {
-                            params = params.query(q);
+                let all_yarns = collect_all_pages_with_progress(
+                    *page_size,
+                    None,
+                    |page_params| {
+                        let client = &client;
+                        let query = query.clone();
+                        async move {
+                            let mut params = YarnSearchParams {
+                                page: page_params,
+                                ..Default::default()
+                            };
+                            if let Some(q) = query {
+                                params = params.query(q);
+                            }
+                            let resp = client.yarns().search(&params).await?;
+                            Ok((resp.yarns, resp.paginator))
                         }
-                        let resp = client.yarns().search(&params).await?;
-                        Ok((resp.yarns, resp.paginator))
-                    }
-                })
+                    },
+                    |progress| {
+                        eprintln!(
+                            "Fetching page {}/{}... ({} yarns so far)",
+                            progress.current_page, progress.total_pages, progress.items_so_far
+                        );
+                    },
+                )
                 .await?;
 
                 if cli.json_output() {
@@ -1313,18 +1343,28 @@ async fn run_project_command(cli: &Cli, cmd: &ProjectCommands) -> Result<(), Cli
             let username = resolve_username(&client, user).await?;
 
             if *all {
-                let all_projects = collect_all_pages(*page_size, None, |page_params| {
-                    let client = &client;
-                    let username = username.clone();
-                    async move {
-                        let params = ProjectsListParams {
-                            page: page_params,
-                            ..Default::default()
-                        };
-                        let resp = client.projects().list(&username, &params).await?;
-                        Ok((resp.projects, resp.paginator))
-                    }
-                })
+                let all_projects = collect_all_pages_with_progress(
+                    *page_size,
+                    None,
+                    |page_params| {
+                        let client = &client;
+                        let username = username.clone();
+                        async move {
+                            let params = ProjectsListParams {
+                                page: page_params,
+                                ..Default::default()
+                            };
+                            let resp = client.projects().list(&username, &params).await?;
+                            Ok((resp.projects, resp.paginator))
+                        }
+                    },
+                    |progress| {
+                        eprintln!(
+                            "Fetching page {}/{}... ({} projects so far)",
+                            progress.current_page, progress.total_pages, progress.items_so_far
+                        );
+                    },
+                )
                 .await?;
 
                 if cli.json_output() {
